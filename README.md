@@ -1,37 +1,50 @@
-# CPU Benchmark
+# RustyBench
 
-A multi-threaded CPU benchmark tool written in Rust that tests different aspects of CPU performance.
+A multi-threaded CPU and GPU benchmark tool written in Rust.
 
 ## Features
 
-- 20-second stress tests for:
-  - Floating Point Operations
-  - Integer Operations
-  - Memory Access
-  - Prime Number Calculations
+### CPU Tests (20s each)
+- Floating Point Operations
+- Integer Operations
+- Memory Access
+- Prime Number Calculations
 - Utilizes all available CPU cores
-- Real-time progress tracking
-- System information display
-- Performance scoring system
+
+### GPU Tests
+- Compute shader performance test
+- Memory transfer speed test
+- Cross-platform GPU support via wgpu
+
+## Requirements
+
+- Rust 1.70+
+- Compatible GPU with Vulkan, Metal, or DirectX 12
 
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/cpu-benchmark
-cd cpu-benchmark
+git clone https://github.com/yourusername/RustyBench
+cd RustyBench
 cargo build --release
 ```
 
 ## Usage
 
-Run the benchmark:
 ```bash
-cargo run --release
+./target/release/rustybench [COMMAND]
+
+Commands:
+  cpu   Run CPU benchmarks
+  gpu   Run GPU benchmarks
+  all   Run all benchmarks
+  help  Print help
+
+Options:
+  --quick  Run shorter CPU tests (5s instead of 20s)
 ```
 
-The benchmark will run for 20 seconds per test, utilizing all available CPU cores.
-
-## Output Example
+## Example Output
 
 ```
 System Information
@@ -39,9 +52,7 @@ CPU: AMD Ryzen 9 5950X
 Cores: 16
 Memory: 32 GB
 
-Starting 20-second Benchmark
-
-Results:
+CPU Results:
 Floating Point
 Time: 20.00s
 Ops/s: 1.23e9
@@ -61,12 +72,14 @@ Prime
 Time: 20.00s
 Ops/s: 5.67e8
 Score: 785.91
+
+GPU Results:
+Device: NVIDIA GeForce RTX 3080
+Type: Discrete
+Time: 5.32s
+Compute Score: 1234.56 MOps/s
+Memory Score: 15678.90 MB/s
 ```
-
-## Requirements
-
-- Rust 1.70 or higher
-- Cargo
 
 ## License
 
