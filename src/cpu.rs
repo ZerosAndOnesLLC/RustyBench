@@ -1,6 +1,5 @@
 use rayon::prelude::*;
 use std::time::{Duration, Instant};
-use colored::*;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rand::Rng;
 
