@@ -26,18 +26,18 @@ pub async fn run_benchmark(quick: bool) -> Vec<BenchmarkResult> {
     let test_duration = if quick {
         Duration::from_secs(3)
     } else {
-        Duration::from_secs(6)
+        Duration::from_secs(10)
     };
 
     for (name, workload) in workloads {
         let pb = m.add(ProgressBar::new(test_duration.as_secs()));
         pb.set_style(ProgressStyle::default_bar()
-            .template("{spinner:.green} {msg} [{bar:40.cyan/blue}] {percent}% ({eta})")
+            .template("\n{spinner:.green} {msg}\n[{bar:40.cyan/blue}] {percent}% ({eta})")
             .unwrap());
         pb.set_message(name.to_string());
 
         let start = Instant::now();
-        let batch_size = 2000; // Increased from 100
+        let batch_size = 2000;
         let mut total_ops = 0u64;
         let mut result = 0u64;
 
@@ -80,7 +80,6 @@ fn test_floating_point(iterations: u64) -> u64 {
             w = (w * 1.4).tan().exp().sqrt();
             sum = sum.wrapping_add(((x + y + z + w).abs()) as u64);
             
-            // Dependency chain to prevent optimization
             x = y + 0.1;
             y = z + 0.2;
             z = w + 0.3;
@@ -106,7 +105,6 @@ fn test_integer(iterations: u64) -> u64 {
             
             sum = sum.wrapping_add(a ^ b ^ c ^ d);
             
-            // Swap values to create dependency
             std::mem::swap(&mut a, &mut d);
             std::mem::swap(&mut b, &mut c);
         }
@@ -115,7 +113,7 @@ fn test_integer(iterations: u64) -> u64 {
 }
 
 fn test_memory(iterations: u64) -> u64 {
-    let size = 20_000_000; // Doubled size
+    let size = 20_000_000;
     let mut vec = Vec::with_capacity(size);
     let mut rng = rand::thread_rng();
     
@@ -126,7 +124,7 @@ fn test_memory(iterations: u64) -> u64 {
     let mut sum = 0u64;
     let mut last_idx = 0;
     for _ in 0..iterations {
-        for _ in 0..200 { // Doubled iterations
+        for _ in 0..200 {
             let idx = rng.gen_range(0..size);
             sum = sum.wrapping_add(vec[idx]);
             vec[last_idx] = sum;
@@ -138,7 +136,7 @@ fn test_memory(iterations: u64) -> u64 {
 
 fn test_prime(iterations: u64) -> u64 {
     let mut count = 0;
-    let chunk_size = 2000; // Doubled
+    let chunk_size = 2000;
     for i in 0..iterations {
         for j in 0..chunk_size {
             let n = i * chunk_size + j;
@@ -163,9 +161,9 @@ fn is_prime(n: u64) -> bool {
 }
 
 fn calculate_score(_result: u64, duration: Duration, total_ops: u64) -> f64 {
-    let base_score = 1000.0;
+    let base_score = 10000.0;
     let cpu_count = num_cpus::get() as f64;
     let ops_per_second = total_ops as f64 / duration.as_secs_f64();
     let per_core_ops = ops_per_second / cpu_count;
-    base_score * (per_core_ops / 1_000_000.0).log10() * (cpu_count / 2.0).sqrt()
+    base_score * ((per_core_ops / 1_000_000.0).abs() + 1.0).log10() * (cpu_count / 2.0).sqrt()
 }
