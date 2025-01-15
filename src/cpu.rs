@@ -37,7 +37,7 @@ pub async fn run_benchmark(quick: bool) -> Vec<BenchmarkResult> {
         pb.set_message(name.to_string());
 
         let start = Instant::now();
-        let batch_size = 2000;
+        let batch_size = 10000;  // Increased from 2000
         let mut total_ops = 0u64;
         let mut result = 0u64;
 
@@ -73,7 +73,7 @@ fn test_floating_point(iterations: u64) -> u64 {
     let mut sum = 0u64;
     
     for _ in 0..iterations {
-        for _ in 0..2000 {
+        for _ in 0..5000 {  // Increased from 2000
             x = (x * 1.1).sqrt().sin().exp();
             y = (y * 1.2).cos().tan().exp();
             z = (z * 1.3).sin().cos().ln();
@@ -97,11 +97,17 @@ fn test_integer(iterations: u64) -> u64 {
     let mut sum = 0u64;
     
     for i in 0..iterations {
-        for _ in 0..2000 {
+        for _ in 0..10000 {  // Increased from 5000
             a = a.wrapping_mul(i.wrapping_add(1)).rotate_left(3);
             b = b.wrapping_add(a).rotate_right(2);
             c = c.wrapping_mul(b).rotate_left(1);
             d = d.wrapping_add(c).rotate_right(3);
+            
+            // Added more operations
+            a = a.wrapping_mul(b).rotate_right(1);
+            b = b.wrapping_mul(c).rotate_left(2);
+            c = c.wrapping_mul(d).rotate_right(3);
+            d = d.wrapping_mul(a).rotate_left(1);
             
             sum = sum.wrapping_add(a ^ b ^ c ^ d);
             
