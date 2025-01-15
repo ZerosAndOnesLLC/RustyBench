@@ -79,9 +79,22 @@ async fn run_gpu_bench() {
 fn print_cpu_results(results: &[rustybench::CPUBenchmarkResult]) {
     println!("\n{}", "CPU Results:".bright_yellow().bold());
     for result in results {
+        let ops = result.operations_per_second as u64;
+        let ops_formatted = format!("{}", ops)
+            .chars()
+            .rev()
+            .collect::<Vec<char>>()
+            .chunks(3)
+            .map(|chunk| chunk.iter().collect::<String>())
+            .collect::<Vec<String>>()
+            .join(",")
+            .chars()
+            .rev()
+            .collect::<String>();
+
         println!("\n{}", result.benchmark_type.bright_cyan().bold());
         println!("{:<12} {:>10.2?}", "Time:", result.duration);
-        println!("{:<12} {:>10.2e}", "Ops/s:", result.operations_per_second);
+        println!("{:<12} {}", "Ops/s:", format!("{:>10} ops/s", ops_formatted));
         println!("{:<12} {:>10.2}", "Score:", result.score);
     }
 }
