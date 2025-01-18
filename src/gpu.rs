@@ -2,6 +2,11 @@ use std::time::{Duration, Instant};
 use wgpu::util::DeviceExt;
 use bytemuck::{Pod, Zeroable};
 
+const MIN_TEST_DURATION: Duration = Duration::from_secs(3);
+const COMPUTE_ITERATIONS: u32 = 100;
+const MEMORY_ITERATIONS: u32 = 50;
+const WORKGROUP_SIZE: u32 = 256;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 struct ComputeData {
@@ -17,8 +22,31 @@ pub struct GPUBenchmarkResult {
     pub duration: Duration,
 }
 
+// More complex compute shader with multiple operations and memory access patterns
 const COMPUTE_SHADER: &str = r#"
     @group(0) @binding(0) var<storage, read_write> data: array<vec4<f32>>;
+
+    fn complex_math(v: vec4<f32>) -> vec4<f32> {
+        var result = v;
+        
+        // Multiple trigonometric operations
+        result = sin(result) * 0.5 + cos(result) * 0.5;
+        result = tan(result) * 0.3 + result * 0.7;
+        
+        // Exponential and logarithmic operations
+        result = exp(result * 0.1) + log(abs(result) + 1.0);
+        
+        // Matrix multiplication simulation
+        let mat = mat4x4<f32>(
+            vec4<f32>(1.1, 0.2, 0.3, 0.4),
+            vec4<f32>(0.2, 1.2, 0.3, 0.4),
+            vec4<f32>(0.3, 0.2, 1.3, 0.4),
+            vec4<f32>(0.4, 0.2, 0.3, 1.4)
+        );
+        result = mat * result;
+        
+        return result;
+    }
 
     @compute @workgroup_size(256)
     fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -29,9 +57,15 @@ const COMPUTE_SHADER: &str = r#"
         
         var value = data[index];
         
-        // Heavy computation
-        for (var i = 0u; i < 1000u; i = i + 1u) {
-            value = sin(value) * cos(value) + tan(value);
+        // Multiple passes of complex computation
+        for (var i = 0u; i < 50u; i = i + 1u) {
+            value = complex_math(value);
+            // Add some branching for more realistic workload
+            if (value.x > 0.0) {
+                value = value * 1.1;
+            } else {
+                value = value * 0.9;
+            }
         }
         
         data[index] = value;
@@ -76,10 +110,18 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
     });
 
     let start = Instant::now();
-    let data_size = 1024 * 1024; // 1M elements
+    let data_size = 2 * 1024 * 1024; // 2M elements for more workload
     
+    // Initialize with varying data for more realistic testing
     let input_data: Vec<ComputeData> = (0..data_size)
-        .map(|i| ComputeData { data: [i as f32, 0.0, 0.0, 0.0] })
+        .map(|i| ComputeData { 
+            data: [
+                (i as f32).sin() * 0.5,
+                (i as f32).cos() * 0.5,
+                (i as f32 * 0.5).tan() * 0.3,
+                i as f32 * 0.1
+            ] 
+        })
         .collect();
 
     let storage_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -105,24 +147,31 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
         }],
     });
 
+    // Compute benchmark with minimum duration
     let compute_start = Instant::now();
-    for _ in 0..10 {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { 
-                label: None,
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&compute_pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            compute_pass.dispatch_workgroups(data_size as u32 / 256, 1, 1);
+    let mut compute_iterations = 0;
+    while compute_start.elapsed() < MIN_TEST_DURATION {
+        for _ in 0..COMPUTE_ITERATIONS {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { 
+                    label: None,
+                    timestamp_writes: None,
+                });
+                compute_pass.set_pipeline(&compute_pipeline);
+                compute_pass.set_bind_group(0, &bind_group, &[]);
+                compute_pass.dispatch_workgroups(data_size as u32 / WORKGROUP_SIZE, 1, 1);
+            }
+            encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, storage_buffer.size());
+            queue.submit(Some(encoder.finish()));
+            compute_iterations += 1;
         }
-        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, storage_buffer.size());
-        queue.submit(Some(encoder.finish()));
     }
     let compute_time = compute_start.elapsed();
+    device.poll(wgpu::Maintain::Wait);
 
-    let memory_bench_size = 256 * 1024 * 1024; // 256MB
+    // Memory benchmark with larger datasets and minimum duration
+    let memory_bench_size = 512 * 1024 * 1024; // 512MB for more thorough testing
     let memory_data: Vec<u8> = (0..memory_bench_size).map(|i| (i % 256) as u8).collect();
     
     let memory_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -139,15 +188,21 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
     });
 
     let memory_start = Instant::now();
-    for _ in 0..5 {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        encoder.copy_buffer_to_buffer(&memory_buffer, 0, &memory_output, 0, memory_bench_size as u64);
-        queue.submit(Some(encoder.finish()));
+    let mut memory_iterations = 0;
+    while memory_start.elapsed() < MIN_TEST_DURATION {
+        for _ in 0..MEMORY_ITERATIONS {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            encoder.copy_buffer_to_buffer(&memory_buffer, 0, &memory_output, 0, memory_bench_size as u64);
+            queue.submit(Some(encoder.finish()));
+            memory_iterations += 1;
+        }
+        device.poll(wgpu::Maintain::Wait);
     }
     let memory_time = memory_start.elapsed();
 
-    let compute_ops = (data_size * 10) as f64;
-    let memory_bytes = (memory_bench_size * 5) as f64;
+    // Calculate scores based on total operations and data processed
+    let compute_ops = (data_size as u64 * compute_iterations as u64 * 50) as f64; // 50 is the inner loop count in shader
+    let memory_bytes = (memory_bench_size as u64 * memory_iterations as u64) as f64;
     
     let compute_score = compute_ops / compute_time.as_secs_f64() / 1_000_000.0;
     let memory_score = memory_bytes / memory_time.as_secs_f64() / (1024.0 * 1024.0);
