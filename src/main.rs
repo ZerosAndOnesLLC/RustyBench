@@ -56,9 +56,22 @@ async fn main() {
 
 fn print_system_info(sys: &System) {
     println!("{}", "\nSystem Information".bright_blue().bold());
-    println!("CPU: {}", sys.cpus()[0].name());
-    println!("Cores: {}", num_cpus::get());
+    
+    // Get detailed CPU information
+    let cpu = &sys.cpus()[0];
+    println!("CPU: {} @ {:.2} GHz", cpu.brand(), cpu.frequency() as f32 / 1000.0);
+    println!("CPU Vendor: {}", cpu.vendor_id());
+    println!("Physical Cores: {}", num_cpus::get_physical());
+    println!("Logical Cores: {}", num_cpus::get());
     println!("Memory: {} GB", sys.total_memory() / 1024 / 1024 / 1024);
+    
+    // Optional: Add CPU cache information if available
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(cache_size) = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cache/index3/size") {
+            println!("L3 Cache: {}", cache_size.trim());
+        }
+    }
 }
 
 async fn run_cpu_bench(quick: bool) {
