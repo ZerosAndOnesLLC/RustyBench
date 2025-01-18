@@ -6,6 +6,8 @@ const MIN_TEST_DURATION: Duration = Duration::from_secs(3);
 const COMPUTE_ITERATIONS: u32 = 100;
 const MEMORY_ITERATIONS: u32 = 50;
 const WORKGROUP_SIZE: u32 = 256;
+// Reduced buffer size to respect common GPU limits
+const MEMORY_BUFFER_SIZE: u64 = 256 * 1024 * 1024; // 256MB
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -22,7 +24,7 @@ pub struct GPUBenchmarkResult {
     pub duration: Duration,
 }
 
-// More complex compute shader with multiple operations and memory access patterns
+// Compute shader remains the same...
 const COMPUTE_SHADER: &str = r#"
     @group(0) @binding(0) var<storage, read_write> data: array<vec4<f32>>;
 
@@ -95,6 +97,10 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
     let device_name = info.name;
     let device_type = format!("{:?}", info.device_type);
 
+    // Get maximum buffer size from device limits
+    let max_buffer_size = device.limits().max_buffer_size;
+    let memory_bench_size = std::cmp::min(MEMORY_BUFFER_SIZE, max_buffer_size as u64);
+
     let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("Compute Shader"),
         source: wgpu::ShaderSource::Wgsl(COMPUTE_SHADER.into()),
@@ -110,9 +116,8 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
     });
 
     let start = Instant::now();
-    let data_size = 2 * 1024 * 1024; // 2M elements for more workload
+    let data_size = 2 * 1024 * 1024; // 2M elements for compute workload
     
-    // Initialize with varying data for more realistic testing
     let input_data: Vec<ComputeData> = (0..data_size)
         .map(|i| ComputeData { 
             data: [
@@ -170,8 +175,7 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
     let compute_time = compute_start.elapsed();
     device.poll(wgpu::Maintain::Wait);
 
-    // Memory benchmark with larger datasets and minimum duration
-    let memory_bench_size = 512 * 1024 * 1024; // 512MB for more thorough testing
+    // Memory benchmark with hardware-appropriate buffer size
     let memory_data: Vec<u8> = (0..memory_bench_size).map(|i| (i % 256) as u8).collect();
     
     let memory_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -182,7 +186,7 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
 
     let memory_output = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Memory Output Buffer"),
-        size: memory_bench_size as u64,
+        size: memory_bench_size,
         usage: wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -192,7 +196,7 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
     while memory_start.elapsed() < MIN_TEST_DURATION {
         for _ in 0..MEMORY_ITERATIONS {
             let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            encoder.copy_buffer_to_buffer(&memory_buffer, 0, &memory_output, 0, memory_bench_size as u64);
+            encoder.copy_buffer_to_buffer(&memory_buffer, 0, &memory_output, 0, memory_bench_size);
             queue.submit(Some(encoder.finish()));
             memory_iterations += 1;
         }
@@ -202,7 +206,7 @@ pub async fn run_benchmark() -> Option<GPUBenchmarkResult> {
 
     // Calculate scores based on total operations and data processed
     let compute_ops = (data_size as u64 * compute_iterations as u64 * 50) as f64; // 50 is the inner loop count in shader
-    let memory_bytes = (memory_bench_size as u64 * memory_iterations as u64) as f64;
+    let memory_bytes = (memory_bench_size * memory_iterations as u64) as f64;
     
     let compute_score = compute_ops / compute_time.as_secs_f64() / 1_000_000.0;
     let memory_score = memory_bytes / memory_time.as_secs_f64() / (1024.0 * 1024.0);
